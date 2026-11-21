@@ -1,0 +1,22 @@
+# Render Blueprint: New > Blueprint > pick this repo. Render asks for ADMIN_PASSWORD on first deploy.
+services:
+  - type: web
+    name: ontario-u21-rankings
+    runtime: node
+    plan: starter # persistent disks need a paid plan; free instances lose data on restart
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_FILE
+        value: /data/db.json
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+    disk:
+      name: rankings-data
+      mountPath: /data
+      sizeGB: 1

@@ -1,0 +1,18 @@
+{
+  "name": "omha-u21-rankings",
+  "version": "1.0.0",
+  "description": "Computer rankings for OMHA U21 hockey teams (goal differential + strength of schedule)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node scripts/seed-demo.js",
+    "test": "node scripts/test-ratings.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}

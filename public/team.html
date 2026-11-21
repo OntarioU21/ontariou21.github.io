@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team Profile</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body data-page="team">
+<main id="main"><p class="muted">Loading…</p></main>
+<script src="/app.js"></script>
+<script>
+(async () => {
+  const id = new URLSearchParams(location.search).get('id');
+  try {
+    const { team: t, games, settings } = await api('/api/teams/' + encodeURIComponent(id));
+    document.title = `${t.name} | Ontario U21 Rankings`;
+    const dropped = games.filter(g => !g.counted).length;
+    $('#main').innerHTML = `
+      <p class="small"><a href="/">&larr; All rankings</a></p>
+      <h1>${esc(t.name)}</h1>
+      <p class="sub">${[t.association, t.tier && 'U21 ' + t.tier, t.league].filter(Boolean).map(esc).join(' · ')}</p>
+      <div class="stats">
+        <div class="stat"><div class="k">${t.rank || !t.groupRank ? 'Rank' : 'League rank'}</div><div class="v">${t.rank ?? t.groupRank ?? 'NR'}</div></div>
+        <div class="stat"><div class="k">Rating</div><div class="v">${fmt(t.rating)}</div></div>
+        <div class="stat"><div class="k">AGD</div><div class="v ${cls(t.agd)}">${signed(t.agd)}</div></div>
+        <div class="stat"><div class="k">SCHED</div><div class="v">${fmt(t.sched)}</div></div>
+        <div class="stat"><div class="k">Record</div><div class="v">${record(t)}</div></div>
+        <div class="stat"><div class="k">GF / GA</div><div class="v">${t.gf} / ${t.ga}</div></div>
+      </div>
+      ${!t.groupRank ? `<div class="notice">Not ranked yet: teams need ${settings.minGames} games (this team has ${t.gp}).</div>` : ''}
+      ${!t.connected ? `<div class="notice">${esc(t.groupLabel)} hasn't played any games against the cross-ranked leagues yet (for example at a tournament), so this rating only compares with teams in the same league.</div>` : ''}
+      <h2>Games</h2>
+      <div class="card table-wrap"><table>
+        <thead><tr>
+          <th>Date</th><th>Opponent</th><th class="num">Opp Rating</th><th class="num">Score</th>
+          <th class="num" title="Goal differential, capped at ${settings.goalCap}">GD</th>
+          <th class="num" title="Capped goal differential + opponent rating. Above the team rating means a better than usual result.">Game Rating</th>
+          <th class="num hide-sm" title="Rating difference before the game result is considered">Expected</th>
+          <th class="num hide-sm" title="Moneyline for this team based on current ratings (tie = push). Click to open in the predictor.">Moneyline</th>
+          <th class="hide-sm">Type</th>
+        </tr></thead>
+        <tbody>${games.length ? games.map(g => `
+          <tr class="${g.counted ? '' : 'not-counted'}">
+            <td>${fmtDate(g.date)}</td>
+            <td class="team"><a href="/team?id=${encodeURIComponent(g.opponent.id)}">${esc(g.opponent.name)}</a>
+              <span class="assoc">${g.opponent.rank ? '#' + g.opponent.rank : 'NR'}${g.opponent.tier ? ' · ' + esc(g.opponent.tier) : ''}${g.counted ? '' : ' · not counted (blowout rule)'}</span></td>
+            <td class="num">${fmt(g.opponent.rating)}</td>
+            <td class="num"><span class="res-${g.result}">${g.result}</span> ${g.gf}-${g.ga}${g.shootout ? ' SO' : ''}</td>
+            <td class="num ${cls(g.cappedDiff)}">${signed(g.cappedDiff, 0)}</td>
+            <td class="num ${g.gameRating != null && t.rating != null ? cls(g.gameRating - t.rating) : ''}">${fmt(g.gameRating)}</td>
+            <td class="num hide-sm">${signed(g.expected)}</td>
+            <td class="num hide-sm">${g.expected == null ? '-' : `<a href="/predict?a=${encodeURIComponent(t.id)}&b=${encodeURIComponent(g.opponent.id)}" title="${pct(matchOdds(g.expected, settings, t.counted, g.opponent.counted).twoWay)} to win">${american(matchOdds(g.expected, settings, t.counted, g.opponent.counted).twoWay)}</a>`}</td>
+            <td class="hide-sm muted">${esc(g.type)}</td>
+          </tr>`).join('') : '<tr><td colspan="9" class="empty">No games yet.</td></tr>'}
+        </tbody></table></div>
+      <p class="small muted" style="margin-top:12px">
+        Game Rating = capped goal differential + opponent rating. Green means the team played above its season rating that night, red means below.
+        ${dropped ? `${dropped} game(s) shown faded were left out by the blowout rule.` : ''}
+        Shootout games count as ties. Moneylines use current ratings, so they show what the line would be today, not what it was before each game.
+      </p>`;
+  } catch (e) {
+    $('#main').innerHTML = `<p class="small"><a href="/">&larr; All rankings</a></p><div class="notice err">${esc(e.message)}</div>`;
+  }
+})();
+</script>
+</body>
+</html>

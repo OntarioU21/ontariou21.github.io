@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How It Works</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body data-page="method">
+<main class="prose">
+  <h1>How the Ratings Work</h1>
+  <p class="sub">Two numbers go into every rating: how much a team wins or loses by, and how good its opponents are.</p>
+
+  <div class="formula">Rating = AGD + SCHED</div>
+
+  <h2>AGD: Average Goal Differential</h2>
+  <p>For each game we take goals for minus goals against, then average it over the season. A single game can only count for
+  up to <strong class="cap">7</strong> goals either way, so a 12-0 win counts the same as a 7-0 win. Running up the score doesn't help.
+  Games decided in a shootout count as ties.</p>
+
+  <h2>SCHED: Schedule Strength</h2>
+  <p>SCHED is the average rating of every opponent a team has played. Beating good teams is worth more than beating weak ones,
+  and losing close to a strong team can still help your rating.</p>
+
+  <h2>Everything is solved at once</h2>
+  <p>Your rating depends on your opponents' ratings, which depend on their opponents, and so on. The site solves the whole
+  set of games together so that every team's rating is exactly its AGD plus its SCHED at the same time. Every game played
+  by any team ends up affecting everyone connected to it.</p>
+
+  <h2>What the numbers mean</h2>
+  <p>Only the gap between two ratings matters. If Team A is rated 95.50 and Team B is 93.00, Team A is expected to win by
+  about 2.5 goals. The scale is shifted so the top ranked team is at 99.99. Each game also gets a
+  <em>game rating</em> (goal differential plus the opponent's rating), which shows how well a team played that night
+  compared to its season average.</p>
+
+  <h2>Moneyline odds</h2>
+  <p>The rating gap is the expected goal margin, but real games scatter around it. The site measures how far results
+  usually land from the prediction (about <strong class="sigma">2.6</strong> goals) and how often games end tied
+  (<strong class="tie">12%</strong>, shootouts included). From those two numbers it works out each team's chance to win, tie or lose,
+  then converts that chance to American odds. A favourite with a 75% chance is <strong>-300</strong>, and an underdog
+  with a 25% chance is <strong>+300</strong>.</p>
+  <p>The standard moneyline treats a tie as a push. The 3-way line prices the tie as its own outcome. Odds start out fair
+  (no bookmaker margin), and the predictor lets you add vig. These odds are for analysis and fun. Ratings only know
+  final scores, not lineups, injuries or travel.</p>
+
+  <h2>The blowout rule</h2>
+  <p>If two teams are more than <strong class="gap">7</strong> goals apart in rating and the stronger team wins by
+  <span class="cap">7</span> or more, the game is left out for both teams. The favourite did everything it could, and because of the
+  cap it would otherwise be punished for it. If the favourite wins by less than expected, the game still counts.</p>
+
+  <h2>Who gets ranked</h2>
+  <p>Teams need at least <strong class="min">10</strong> games before they get a rank. Teams with fewer games still have a rating, which
+  you can see by ticking "Show teams under the game minimum". Ratings are most reliable when tiers and leagues play
+  each other in tournaments and exhibitions, because those games link the different groups of teams together. A team that
+  has never played anyone linked to the main group is marked as not connected.</p>
+
+  <h2>Which games count</h2>
+  <p>League, playoff, tournament and exhibition games all count the same, as long as a final score has been entered.</p>
+</main>
+<script src="/app.js"></script>
+<script>
+api('/api/rankings').then(d => {
+  $$('.cap').forEach(e => e.textContent = d.settings.goalCap);
+  $$('.gap').forEach(e => e.textContent = d.settings.blowoutGap);
+  $$('.min').forEach(e => e.textContent = d.settings.minGames);
+  $$('.sigma').forEach(e => e.textContent = d.settings.sigma.toFixed(1));
+  $$('.tie').forEach(e => e.textContent = Math.round(d.settings.tieRate * 100) + '%');
+}).catch(() => {});
+</script>
+</body>
+</html>
