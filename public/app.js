@@ -2,7 +2,24 @@
 const $ = (sel, el = document) => el.querySelector(sel);
 const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 
+// On the published (static) site, window.STATIC_SITE is set by config.js and the API is
+// replaced by pre-built JSON files: api/rankings -> data/rankings.json, api/teams/X -> data/teams/X.json.
+function staticUrl(url) {
+  const path = url.replace(/^\//, '');
+  if (path === 'api/rankings') return 'data/rankings.json';
+  const m = path.match(/^api\/teams\/([^/?#]+)$/);
+  if (m) return `data/teams/${m[1]}.json`;
+  return null;
+}
+
 async function api(url, opts = {}) {
+  if (window.STATIC_SITE) {
+    const file = staticUrl(url);
+    if (!file) throw new Error('Not available on the published site');
+    const res = await fetch(file, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(res.status === 404 ? 'Not found' : `Request failed (${res.status})`);
+    return res.json();
+  }
   const res = await fetch(url, {
     ...opts,
     headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
@@ -57,10 +74,11 @@ const pct = p => (p * 100).toFixed(p > 0.995 || p < 0.005 ? 1 : 0) + '%';
 
 function renderChrome() {
   const page = document.body.dataset.page;
-  const links = [['index', '/', 'Rankings'], ['predict', '/predict', 'Game Predictor'], ['method', '/method', 'How It Works'], ['admin', '/admin', 'Admin']];
+  const links = [['index', './', 'Rankings'], ['predict', 'predict.html', 'Game Predictor'], ['method', 'method.html', 'How It Works']];
+  if (!window.STATIC_SITE) links.push(['admin', '/admin', 'Admin']);
   document.body.insertAdjacentHTML('afterbegin', `
     <header class="site-header"><div class="inner">
-      <a class="logo" href="/"><span class="puck">U21</span>Ontario U21 Rankings</a>
+      <a class="logo" href="./"><span class="puck">U21</span>Ontario U21 Rankings</a>
       <nav>${links.map(([k, href, label]) => `<a href="${href}" class="${k === page ? 'active' : ''}">${label}</a>`).join('')}</nav>
     </div></header>`);
   document.body.insertAdjacentHTML('beforeend', `

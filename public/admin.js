@@ -115,7 +115,7 @@ async function commitImport() {
   if (!rows.length) return flash('No games selected.', 'err');
   try {
     const r = await api('/api/admin/import/commit', { method: 'POST', body: { rows, resolutions, defaults: { type: $('#impType').value, tier: $('#impTier').value, league: $('#impLeague').value } } });
-    flash(`Imported ${r.added} game(s), created ${r.createdTeams} team(s), skipped ${r.skipped}.`);
+    flash(`Imported ${r.added} game(s), created ${r.createdTeams} team(s), skipped ${r.skipped}. Press "Publish to public site" when you're done importing.`);
     $('#preview').innerHTML = ''; $('#pasteText').value = ''; parsed = null;
     await refresh();
   } catch (e) { fail(e); }
@@ -216,6 +216,17 @@ $('#settingsForm').addEventListener('submit', async e => {
     await api('/api/admin/settings', { method: 'PUT', body: { season: $('#sSeason').value, minGames: $('#sMin').value, goalCap: $('#sCap').value, blowoutGap: $('#sGap').value, oddsSpread: $('#sSpread').value } });
     flash('Settings saved. Ratings recalculated.');
   } catch (err) { fail(err); }
+});
+
+$('#publishBtn').addEventListener('click', async () => {
+  const btn = $('#publishBtn');
+  btn.disabled = true; btn.textContent = 'Publishing...';
+  try {
+    const r = await api('/api/admin/publish', { method: 'POST' });
+    $('#msg').innerHTML = `<div class="notice ok">Published ${r.teams} teams and ${r.games} games${r.changed ? '' : ' (nothing changed since the last publish)'}.
+      ${r.url ? `The public site updates within a minute or two: <a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>` : ''}</div>`;
+  } catch (e) { fail(e); }
+  finally { btn.disabled = false; btn.textContent = 'Publish to public site'; }
 });
 
 $('#restoreBtn').addEventListener('click', () => {

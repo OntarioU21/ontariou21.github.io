@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How It Works</title>
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body data-page="method">
 <main class="prose">
@@ -57,9 +57,9 @@
   <h2>Which games count</h2>
   <p>League, playoff, tournament and exhibition games all count the same, as long as a final score has been entered.</p>
 </main>
-<script src="/app.js"></script>
+<script src="app.js"></script>
 <script>
-api('/api/rankings').then(d => {
+api('api/rankings').then(d => {
   $$('.cap').forEach(e => e.textContent = d.settings.goalCap);
   $$('.gap').forEach(e => e.textContent = d.settings.blowoutGap);
   $$('.min').forEach(e => e.textContent = d.settings.minGames);

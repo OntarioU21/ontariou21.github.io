@@ -5,6 +5,8 @@ const path = require('path');
 const store = require('./lib/store');
 const { computeRatings } = require('./lib/ratings');
 const { parseText } = require('./lib/parse');
+const { rankingsPayload, teamPayload } = require('./lib/views');
+const { publish } = require('./lib/publish');
 
 const PORT = process.env.PORT || 4700;
 const PRODUCTION = process.env.NODE_ENV === 'production';
@@ -100,19 +102,7 @@ function parseGameInput(body, db) {
 }
 
 // ---------- public API ----------
-app.get('/api/rankings', (req, res) => {
-  const db = store.load();
-  const r = ratings();
-  const rows = [...r.rows].sort((a, b) => {
-    if (a.rank && b.rank) return a.rank - b.rank;
-    if (a.rank) return -1; if (b.rank) return 1;
-    return (b.rating ?? -1e9) - (a.rating ?? -1e9);
-  });
-  res.json({
-    season: db.settings.season, settings: r.settings, updatedAt: db.updatedAt,
-    gameCount: db.games.length, teams: rows,
-  });
-});
+app.get('/api/rankings', (req, res) => res.json(rankingsPayload(store.load(), ratings())));
 
 app.get('/api/teams', (req, res) => {
   const db = store.load();
@@ -122,33 +112,9 @@ app.get('/api/teams', (req, res) => {
 function pick(o, keys) { const out = {}; if (o) for (const k of keys) out[k] = o[k]; return out; }
 
 app.get('/api/teams/:id', (req, res) => {
-  const db = store.load();
-  const r = ratings();
-  const team = db.teams.find(t => t.id === req.params.id);
-  if (!team) return res.status(404).json({ error: 'Team not found' });
-  const me = r.byId.get(team.id);
-  const games = db.games
-    .filter(g => g.homeId === team.id || g.awayId === team.id)
-    .map(g => {
-      const home = g.homeId === team.id;
-      const oppId = home ? g.awayId : g.homeId;
-      const opp = r.byId.get(oppId);
-      const info = r.gameInfo.get(g.id) || { d: 0, counted: false };
-      const d = home ? info.d : -info.d;
-      const gf = home ? g.homeScore : g.awayScore, ga = home ? g.awayScore : g.homeScore;
-      return {
-        id: g.id, date: g.date, type: g.type, shootout: g.shootout,
-        opponent: opp ? { id: oppId, name: opp.name, tier: opp.tier, rating: opp.rating, rank: opp.rank, counted: opp.counted } : { id: oppId, name: '(deleted team)' },
-        gf, ga,
-        result: g.shootout || gf === ga ? 'T' : gf > ga ? 'W' : 'L',
-        cappedDiff: d,
-        gameRating: opp && opp.rating != null ? d + opp.rating : null,
-        expected: me && me.rating != null && opp && opp.rating != null ? me.rating - opp.rating : null,
-        counted: info.counted,
-      };
-    })
-    .sort((a, b) => b.date.localeCompare(a.date));
-  res.json({ team: { ...team, ...me }, games, settings: r.settings, season: db.settings.season });
+  const payload = teamPayload(store.load(), ratings(), req.params.id);
+  if (!payload) return res.status(404).json({ error: 'Team not found' });
+  res.json(payload);
 });
 
 app.get('/api/meta', (req, res) => {
@@ -357,6 +323,15 @@ app.get('/api/admin/export', requireAdmin, (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="u21-rankings-backup-${new Date().toISOString().slice(0, 10)}.json"`);
   res.json(store.load());
 });
+// Build the public static site and push it to GitHub Pages (gh-pages branch).
+app.post('/api/admin/publish', requireAdmin, async (req, res) => {
+  try {
+    res.json(await publish(store.load(), ratings()));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Replace all data with an uploaded backup (from the export above). The current data is
 // saved next to the data file first, so a bad restore can be undone.
 app.post('/api/admin/restore', requireAdmin, (req, res) => {

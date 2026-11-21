@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ontario U21 Rankings</title>
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body data-page="index">
 <main>
@@ -37,15 +37,15 @@
   <p class="small muted" style="margin-top:12px">
     <strong>Rating</strong> = AGD + SCHED. <strong>AGD</strong> is average goal differential (capped at <span class="cap">7</span> per game).
     <strong>SCHED</strong> is the average rating of opponents played. Rating differences predict goal margin.
-    <a href="/method">How it works</a>.
+    <a href="method.html">How it works</a>.
   </p>
 </main>
-<script src="/app.js"></script>
+<script src="app.js"></script>
 <script>
 let data = null, sortKey = 'rank', sortDir = 1;
 
 async function load() {
-  data = await api('/api/rankings');
+  data = await api('api/rankings');
   const s = data.settings;
   $$('.cap').forEach(e => e.textContent = s.goalCap);
   const ranked = data.teams.filter(t => t.rank).length;
@@ -73,7 +73,7 @@ function saveFilters() {
 
 function render() {
   if (!data.teams.length) {
-    $('#rows').innerHTML = `<tr><td colspan="9" class="empty">No games entered yet. An admin can add results from the <a href="/admin">Admin</a> page.</td></tr>`;
+    $('#rows').innerHTML = `<tr><td colspan="9" class="empty">No games entered yet.</td></tr>`;
     return;
   }
   const q = $('#q').value.trim().toLowerCase(), tier = $('#tier').value, league = $('#league').value, all = $('#showAll').checked;
@@ -95,7 +95,7 @@ function render() {
   const rowHtml = t => `
     <tr>
       <td class="rank">${t.groupRank ?? '<span class="muted">NR</span>'}</td>
-      <td class="team"><a href="/team?id=${encodeURIComponent(t.id)}">${esc(t.name)}</a>
+      <td class="team"><a href="team.html?id=${encodeURIComponent(t.id)}">${esc(t.name)}</a>
         ${t.association ? `<span class="assoc">${esc(t.association)}</span>` : ''}</td>
       <td>${t.tier ? `<span class="pill">${esc(t.tier)}</span>` : ''}</td>
       <td class="hide-sm">${esc(t.league)}</td>

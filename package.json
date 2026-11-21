@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "demo": "node scripts/seed-demo.js",
-    "test": "node scripts/test-ratings.js"
+    "test": "node scripts/test-ratings.js",
+    "publish": "node scripts/publish.js"
   },
   "dependencies": {
     "express": "^4.19.2"

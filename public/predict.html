@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Game Predictor</title>
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="styles.css">
 <style>
   .odds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
   .odds .stat { text-align: center; }
@@ -42,11 +42,11 @@
   </div>
   <p class="small muted" id="model"></p>
 </main>
-<script src="/app.js"></script>
+<script src="app.js"></script>
 <script>
 let teams = [], settings = {};
 (async () => {
-  const d = await api('/api/rankings');
+  const d = await api('api/rankings');
   settings = d.settings;
   teams = d.teams.filter(t => t.rating != null).sort((x, y) => x.name.localeCompare(y.name));
   const opts = '<option value="">Choose a team</option>' + teams.map(t => `<option value="${esc(t.id)}">${esc(t.name)}${t.tier ? ' (' + esc(t.tier) + ')' : ''}</option>`).join('');
