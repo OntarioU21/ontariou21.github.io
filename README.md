@@ -15,7 +15,7 @@ npm start                             -> http://localhost:4700  (admin password 
 
 ## Public site (free, GitHub Pages)
 
-Live at https://mitchelltomaino1-gif.github.io/omha-u21-rankings/
+Live at https://ontariou21.github.io/ (repo: github.com/OntarioU21/ontariou21.github.io)
 
 The public site is a static, read-only copy: rankings, team pages, predictor and How It Works, with the data baked in as JSON. Admin, the data file and the bookmarklet stay on your computer.
 
