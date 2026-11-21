@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game Predictor</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .odds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+  .odds .stat { text-align: center; }
+  .odds .stat .ml { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .odds .stat .p { color: var(--muted); font-size: 13px; }
+  .odds .stat.fav { border-color: var(--link); }
+  @media (max-width: 640px) { .odds { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="predict">
+<main>
+  <h1>Game Predictor</h1>
+  <p class="sub">Pick two teams to get the expected goal margin, win chances and moneyline odds from their ratings.</p>
+  <div class="card pad">
+    <div class="predict">
+      <select id="a"></select>
+      <div class="vs">vs</div>
+      <select id="b"></select>
+    </div>
+    <div class="big-result" id="out"></div>
+    <p class="small muted" id="detail" style="text-align:center;margin-bottom:0"></p>
+    <div id="odds" hidden>
+      <h2 style="margin-bottom:0">Moneyline</h2>
+      <p class="small muted" style="margin-top:2px">If the game ends in a tie, the bet is refunded (a push).</p>
+      <div class="odds" id="ml2"></div>
+      <h2 style="margin-bottom:0">3-way (regulation result)</h2>
+      <p class="small muted" style="margin-top:2px">Win, tie or lose, with all three outcomes priced.</p>
+      <div class="odds" id="ml3"></div>
+      <div class="toolbar" style="margin-top:18px">
+        <label class="check">Bookmaker margin (vig)
+          <select id="vig"><option value="0">None (fair odds)</option><option value="0.025">2.5%</option><option value="0.045">4.5%</option><option value="0.07">7%</option></select>
+        </label>
+      </div>
+    </div>
+  </div>
+  <p class="small muted" id="model"></p>
+</main>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+let teams = [], settings = {};
+(async () => {
+  const d = await api('api/rankings');
+  settings = d.settings;
+  teams = d.teams.filter(t => t.rating != null).sort((x, y) => x.name.localeCompare(y.name));
+  const opts = '<option value="">Choose a team</option>' + teams.map(t => `<option value="${esc(t.id)}">${esc(t.name)}${t.tier ? ' (' + esc(t.tier) + ')' : ''}</option>`).join('');
+  $('#a').innerHTML = opts; $('#b').innerHTML = opts;
+  const p = new URLSearchParams(location.search);
+  if (p.get('a')) $('#a').value = p.get('a');
+  if (p.get('b')) $('#b').value = p.get('b');
+  try { const v = localStorage.getItem('u21-vig'); if (v !== null) $('#vig').value = v; } catch {}
+  $('#model').textContent = `How the odds work: results land within about ${settings.sigma.toFixed(2)} goals of the rating prediction on average` +
+    (settings.sampleGames >= 30 ? ` (measured from ${settings.sampleGames} games)` : ' (a default until 30+ games are entered)') +
+    `, and ${(settings.tieRate * 100).toFixed(0)}% of games end tied. Odds are for fun and analysis only. Ratings don't know about injuries, lineups or home ice.`;
+  update();
+})();
+
+function cell(name, p, vig, fav, n = 2) {
+  return `<div class="stat ${fav ? 'fav' : ''}"><div class="k">${esc(name)}</div><div class="ml">${american(p, vig, n)}</div><div class="p">${pct(p)}</div></div>`;
+}
+function update() {
+  const a = teams.find(t => t.id === $('#a').value), b = teams.find(t => t.id === $('#b').value);
+  if (!a || !b || a === b) {
+    $('#out').textContent = teams.length ? 'Select two different teams' : 'No rated teams yet';
+    $('#detail').textContent = ''; $('#odds').hidden = true; return;
+  }
+  const diff = a.rating - b.rating;
+  const fav = diff >= 0 ? a : b;
+  $('#out').innerHTML = Math.abs(diff) < 0.25 ? 'Too close to call' : `${esc(fav.name)} by ${Math.abs(diff).toFixed(2)} goals`;
+  $('#detail').textContent = `${a.name}: ${a.rating.toFixed(2)}  ·  ${b.name}: ${b.rating.toFixed(2)}` +
+    (a.group !== b.group ? '  ·  Warning: these teams are in leagues that haven\'t played each other yet, so this prediction is unreliable.' : '');
+
+  const o = matchOdds(diff, settings, a.counted, b.counted), vig = +$('#vig').value;
+  $('#ml2').innerHTML = cell(a.name, o.twoWay, vig, diff > 0) + `<div class="stat"><div class="k">Expected margin</div><div class="ml">${signed(diff, 1)}</div><div class="p">${esc(a.name)}</div></div>` + cell(b.name, 1 - o.twoWay, vig, diff < 0);
+  $('#ml3').innerHTML = cell(a.name, o.win, vig, diff > 0, 3) + cell('Tie', o.tie, vig, false, 3) + cell(b.name, o.loss, vig, diff < 0, 3);
+  $('#odds').hidden = false;
+  history.replaceState(null, '', `?a=${encodeURIComponent(a.id)}&b=${encodeURIComponent(b.id)}`);
+}
+$('#a').addEventListener('change', update);
+$('#b').addEventListener('change', update);
+$('#vig').addEventListener('change', () => { try { localStorage.setItem('u21-vig', $('#vig').value); } catch {} update(); });
+</script>
+</body>
+</html>

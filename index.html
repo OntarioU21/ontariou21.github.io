@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ontario U21 Rankings</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body data-page="index">
+<main>
+  <h1>OMHA U21 Team Rankings</h1>
+  <p class="sub" id="subtitle">Loading…</p>
+
+  <div class="toolbar">
+    <input id="q" class="grow" type="search" placeholder="Search team or association">
+    <select id="tier"><option value="">All tiers</option></select>
+    <select id="league"><option value="">All leagues</option></select>
+    <label class="check"><input type="checkbox" id="showAll"> Show teams under the game minimum</label>
+  </div>
+
+  <div class="card table-wrap">
+    <table>
+      <thead><tr>
+        <th class="sortable" data-k="rank">Rank</th>
+        <th class="sortable" data-k="name">Team</th>
+        <th class="sortable" data-k="tier">Tier</th>
+        <th class="sortable hide-sm" data-k="league">League</th>
+        <th class="sortable num" data-k="gp">GP</th>
+        <th class="num">Record</th>
+        <th class="sortable num" data-k="rating">Rating</th>
+        <th class="sortable num" data-k="agd">AGD</th>
+        <th class="sortable num" data-k="sched">SCHED</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p class="small muted" style="margin-top:12px">
+    <strong>Rating</strong> = AGD + SCHED. <strong>AGD</strong> is average goal differential (capped at <span class="cap">7</span> per game).
+    <strong>SCHED</strong> is the average rating of opponents played. Rating differences predict goal margin.
+    <a href="method.html">How it works</a>.
+  </p>
+</main>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+let data = null, sortKey = 'rank', sortDir = 1;
+
+async function load() {
+  data = await api('api/rankings');
+  const s = data.settings;
+  $$('.cap').forEach(e => e.textContent = s.goalCap);
+  const ranked = data.teams.filter(t => t.rank).length;
+  $('#subtitle').textContent = data.teams.length
+    ? `${data.season} season · ${ranked} ranked teams · ${data.gameCount} games · teams need ${s.minGames}+ games to be ranked` +
+      (data.updatedAt ? ` · updated ${new Date(data.updatedAt).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })}` : '')
+    : `${data.season} season`;
+  const opts = (k) => [...new Set(data.teams.map(t => t[k]).filter(Boolean))].sort();
+  $('#tier').insertAdjacentHTML('beforeend', opts('tier').map(v => `<option>${esc(v)}</option>`).join(''));
+  $('#league').insertAdjacentHTML('beforeend', opts('league').map(v => `<option>${esc(v)}</option>`).join(''));
+  restoreFilters();
+  render();
+}
+
+function restoreFilters() {
+  try {
+    const f = JSON.parse(localStorage.getItem('u21-filters') || '{}');
+    if (f.tier && [...$('#tier').options].some(o => o.value === f.tier)) $('#tier').value = f.tier;
+    if (f.league && [...$('#league').options].some(o => o.value === f.league)) $('#league').value = f.league;
+  } catch {}
+}
+function saveFilters() {
+  try { localStorage.setItem('u21-filters', JSON.stringify({ tier: $('#tier').value, league: $('#league').value })); } catch {}
+}
+
+function render() {
+  if (!data.teams.length) {
+    $('#rows').innerHTML = `<tr><td colspan="9" class="empty">No games entered yet.</td></tr>`;
+    return;
+  }
+  const q = $('#q').value.trim().toLowerCase(), tier = $('#tier').value, league = $('#league').value, all = $('#showAll').checked;
+  let rows = data.teams.filter(t =>
+    (all || t.groupRank) && (!tier || t.tier === tier) && (!league || t.league === league) &&
+    (!q || (t.name + ' ' + t.association).toLowerCase().includes(q)));
+  const sorter = (a, b) => {
+    let x = a[sortKey], y = b[sortKey];
+    if (sortKey === 'rank') { x = a.groupRank ?? 1e9; y = b.groupRank ?? 1e9; }
+    if (x == null) return 1; if (y == null) return -1;
+    return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sortDir;
+  };
+  // Teams linked to the main group share one ranking. Leagues with no games against
+  // that group can only be ranked internally, so each gets its own section.
+  const groups = new Map();
+  for (const t of rows) { if (!groups.has(t.group)) groups.set(t.group, []); groups.get(t.group).push(t); }
+  const order = [...groups.keys()].sort((a, b) => (a === 'main' ? -1 : b === 'main' ? 1 : groups.get(a)[0].groupLabel.localeCompare(groups.get(b)[0].groupLabel)));
+  const multi = order.length > 1 || (order[0] && order[0] !== 'main');
+  const rowHtml = t => `
+    <tr>
+      <td class="rank">${t.groupRank ?? '<span class="muted">NR</span>'}</td>
+      <td class="team"><a href="team.html?id=${encodeURIComponent(t.id)}">${esc(t.name)}</a>
+        ${t.association ? `<span class="assoc">${esc(t.association)}</span>` : ''}</td>
+      <td>${t.tier ? `<span class="pill">${esc(t.tier)}</span>` : ''}</td>
+      <td class="hide-sm">${esc(t.league)}</td>
+      <td class="num">${t.gp}</td>
+      <td class="num">${record(t)}</td>
+      <td class="num rating">${fmt(t.rating)}</td>
+      <td class="num ${cls(t.agd)}">${signed(t.agd)}</td>
+      <td class="num">${fmt(t.sched)}</td>
+    </tr>`;
+  $('#rows').innerHTML = rows.length ? order.map(g => {
+    const list = groups.get(g).sort(sorter);
+    const head = !multi ? '' : g === 'main'
+      ? `<tr class="group-head"><td colspan="9"><strong>Cross-ranked teams</strong> <span class="muted small">${esc(list[0].groupLabel)}: linked by tournament or interlock games, so these ratings compare directly</span></td></tr>`
+      : `<tr class="group-head"><td colspan="9"><strong>${esc(list[0].groupLabel)}</strong> <span class="muted small">Not yet linked to other leagues. Ranked within this league only; ratings can't be compared with teams outside it.</span></td></tr>`;
+    return head + list.map(rowHtml).join('');
+  }).join('') : `<tr><td colspan="9" class="empty">No teams match those filters.</td></tr>`;
+}
+
+$$('th.sortable').forEach(th => th.addEventListener('click', () => {
+  const k = th.dataset.k;
+  if (sortKey === k) sortDir = -sortDir;
+  else { sortKey = k; sortDir = ['rating', 'agd', 'sched', 'gp'].includes(k) ? -1 : 1; }
+  render();
+}));
+['q', 'tier', 'league', 'showAll'].forEach(id => $('#' + id).addEventListener('input', () => { saveFilters(); render(); }));
+load().catch(e => { $('#subtitle').textContent = e.message; });
+</script>
+</body>
+</html>
