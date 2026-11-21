@@ -13,7 +13,17 @@ npm start                             -> http://localhost:4700  (admin password 
 - Data lives in `data/db.json` (not in git). Admin > Settings has backup download and restore.
 - `npm run demo` writes fictional demo data. It refuses to overwrite real data unless you add `--force`.
 
-## Deploy (Render)
+## Public site (free, GitHub Pages)
+
+Live at https://mitchelltomaino1-gif.github.io/omha-u21-rankings/
+
+The public site is a static, read-only copy: rankings, team pages, predictor and How It Works, with the data baked in as JSON. Admin, the data file and the bookmarklet stay on your computer.
+
+To update it: import results locally as usual, then press **Publish to public site** in Admin (or run `npm run publish`). That builds the pages into `.publish/` (a git worktree on the `gh-pages` branch) and pushes it. GitHub Pages updates within a minute or two.
+
+## Alternative: full live server (Render, paid)
+
+If you ever want the admin online too:
 
 1. Push this repo to GitHub.
 2. In Render: **New > Blueprint**, pick the repo. `render.yaml` sets up a Node web service with a 1 GB persistent disk at `/data`.
