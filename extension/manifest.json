@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "U21 Rankings Nightly Import",
+  "version": "1.0.0",
+  "description": "Every night, reads U21 rep results from the league Schedule pages and sends them to the local rankings site.",
+  "permissions": ["alarms", "tabs", "scripting", "storage", "notifications"],
+  "host_permissions": [
+    "https://beechey.ca/*",
+    "https://woaa.on.ca/*",
+    "https://shamrockhockeyleague.ca/*",
+    "https://eomhl.ca/*",
+    "http://localhost:4700/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "U21 Rankings nightly import" },
+  "icons": { "128": "icon.png" }
+}

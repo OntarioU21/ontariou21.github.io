@@ -13,13 +13,24 @@
 (async () => {
   const id = new URLSearchParams(location.search).get('id');
   try {
-    const { team: t, games, settings } = await api('api/teams/' + encodeURIComponent(id));
+    const want = urlSeason();
+    const { team: t, games, settings, season, currentSeason, seasons } = await api('api/teams/' + encodeURIComponent(id) + (want ? '?season=' + encodeURIComponent(want) : ''));
+    const isCurrent = season === currentSeason;
+    const sq = seasonQuery(season, currentSeason);
+    const allSeasons = [...new Set([currentSeason, ...seasons])].sort().reverse();
+    const switcher = allSeasons.length > 1
+      ? `<div class="toolbar">${allSeasons.map(s => s === season
+          ? `<span class="pill" style="padding:4px 10px;font-weight:700">${esc(s)}</span>`
+          : `<a class="pill" style="padding:4px 10px" href="team.html?id=${encodeURIComponent(id)}${seasonQuery(s, currentSeason)}">${esc(s)}</a>`).join(' ')}</div>`
+      : '';
     document.title = `${t.name} | Ontario U21 Rankings`;
     const dropped = games.filter(g => !g.counted).length;
     $('#main').innerHTML = `
-      <p class="small"><a href="./">&larr; All rankings</a></p>
+      <p class="small"><a href="./${seasonQuery(season, currentSeason, '?')}">&larr; All rankings</a></p>
       <h1>${esc(t.name)}</h1>
       <p class="sub">${[t.association, t.tier && 'U21 ' + t.tier, t.league].filter(Boolean).map(esc).join(' · ')}</p>
+      ${switcher}
+      <p class="small muted" style="margin:0 0 8px">${esc(season)} season${isCurrent ? '' : ' (final)'}</p>
       <div class="stats">
         <div class="stat"><div class="k">${t.rank || !t.groupRank ? 'Rank' : 'League rank'}</div><div class="v">${t.rank ?? t.groupRank ?? 'NR'}</div></div>
         <div class="stat"><div class="k">Rating</div><div class="v">${fmt(t.rating)}</div></div>
@@ -28,8 +39,8 @@
         <div class="stat"><div class="k">Record</div><div class="v">${record(t)}</div></div>
         <div class="stat"><div class="k">GF / GA</div><div class="v">${t.gf} / ${t.ga}</div></div>
       </div>
-      ${!t.groupRank ? `<div class="notice">Not ranked yet: teams need ${settings.minGames} games (this team has ${t.gp}).</div>` : ''}
-      ${!t.connected ? `<div class="notice">${esc(t.groupLabel)} hasn't played any games against the cross-ranked leagues yet (for example at a tournament), so this rating only compares with teams in the same league.</div>` : ''}
+      ${!t.gp ? `<div class="notice">No games for this team in ${esc(season)}.</div>` : !t.groupRank ? `<div class="notice">${isCurrent ? 'Not ranked yet' : 'Not ranked'}: teams need ${settings.minGames} games (this team ${isCurrent ? 'has' : 'had'} ${t.gp}).</div>` : ''}
+      ${t.gp && !t.connected ? `<div class="notice">${esc(t.groupLabel)} ${isCurrent ? "hasn't played" : "didn't play"} any games against the cross-ranked leagues yet (for example at a tournament), so this rating only compares with teams in the same league.</div>` : ''}
       <h2>Games</h2>
       <div class="card table-wrap"><table>
         <thead><tr>
@@ -43,14 +54,14 @@
         <tbody>${games.length ? games.map(g => `
           <tr class="${g.counted ? '' : 'not-counted'}">
             <td>${fmtDate(g.date)}</td>
-            <td class="team"><a href="team.html?id=${encodeURIComponent(g.opponent.id)}">${esc(g.opponent.name)}</a>
+            <td class="team"><a href="team.html?id=${encodeURIComponent(g.opponent.id)}${sq}">${esc(g.opponent.name)}</a>
               <span class="assoc">${g.opponent.rank ? '#' + g.opponent.rank : 'NR'}${g.opponent.tier ? ' · ' + esc(g.opponent.tier) : ''}${g.counted ? '' : ' · not counted (blowout rule)'}</span></td>
             <td class="num">${fmt(g.opponent.rating)}</td>
             <td class="num"><span class="res-${g.result}">${g.result}</span> ${g.gf}-${g.ga}${g.shootout ? ' SO' : ''}</td>
             <td class="num ${cls(g.cappedDiff)}">${signed(g.cappedDiff, 0)}</td>
             <td class="num ${g.gameRating != null && t.rating != null ? cls(g.gameRating - t.rating) : ''}">${fmt(g.gameRating)}</td>
             <td class="num hide-sm">${signed(g.expected)}</td>
-            <td class="num hide-sm">${g.expected == null ? '-' : `<a href="predict.html?a=${encodeURIComponent(t.id)}&b=${encodeURIComponent(g.opponent.id)}" title="${pct(matchOdds(g.expected, settings, t.counted, g.opponent.counted).twoWay)} to win">${american(matchOdds(g.expected, settings, t.counted, g.opponent.counted).twoWay)}</a>`}</td>
+            <td class="num hide-sm">${g.expected == null || !isCurrent ? '-' : `<a href="predict.html?a=${encodeURIComponent(t.id)}&b=${encodeURIComponent(g.opponent.id)}" title="${pct(matchOdds(g.expected, settings, t.counted, g.opponent.counted).twoWay)} to win">${american(matchOdds(g.expected, settings, t.counted, g.opponent.counted).twoWay)}</a>`}</td>
             <td class="hide-sm muted">${esc(g.type)}</td>
           </tr>`).join('') : '<tr><td colspan="9" class="empty">No games yet.</td></tr>'}
         </tbody></table></div>

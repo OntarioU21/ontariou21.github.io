@@ -43,6 +43,18 @@ Environment variables:
 
 Any Node host with a persistent disk works (Railway volume, Fly.io volume, a VPS). Hosts without persistent storage will lose the data on every restart.
 
+## Seasons
+
+A game's season comes from its date (August to July). Every season with games gets its own rankings: the rankings page has a season dropdown and team pages have season buttons. Past seasons show final standings without moneylines. The current season is set in Admin > Settings.
+
+Past seasons (2021-22 to 2025-26) were loaded once with `scripts/import-history.js` from WOAA, Beechey, Shamrock and EOMHL league pages plus the Mooretown International Silver Stick and OMHA Championships (Kingston) U21 divisions, which link the leagues. Teams that only appear at those tournaments have the league "Tournament only". Gaps: Beechey 2022-23 has no schedule online, Shamrock had no U21 before 2023-24, and 2021-22 has no tournament games, so its leagues are ranked separately.
+
+## Nightly auto-import (Chrome extension)
+
+`extension/` is a small Chrome extension. Load it once: `chrome://extensions` > Developer mode > Load unpacked > pick the `extension` folder. Every night at 11:30 PM it opens the four league Schedule pages in background tabs of your own Chrome, reads the scores and posts them to the local server (`/api/auto/import`, loopback and extension only). New games between known teams are imported and the site is republished. Games with an unknown team name are held in Admin > Import for review. If a site asks for a human check, the extension leaves that tab open and shows a red "!"; the next run catches up. Its popup has a "Run now" button.
+
+It needs Chrome open and the server running at that time. To start the server at login, put a shortcut to `scripts/start-server-hidden.vbs` in your Startup folder (Win+R, `shell:startup`).
+
 ## Entering results
 
 **One-click import (recommended):** Admin > Import has a "Send to Rankings" button. Drag it to the bookmarks bar, open a league's Schedule & Results page (e.g. https://beechey.ca/Schedule/), and click it. It runs in your own browser, reads every month of the current season, keeps only U21 rep divisions (local league and house league are skipped), and sends the games to the admin import preview. Nothing is saved until you press Import. Code: `public/bookmarklet.src.js`. Scores on these sites are shown visitor-home (verified against Beechey standings).

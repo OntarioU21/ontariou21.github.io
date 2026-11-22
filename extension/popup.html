@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px/1.45 system-ui, sans-serif; width: 300px; margin: 12px; color: #1b2330; }
+  h1 { font-size: 15px; margin: 0 0 6px; }
+  button { background: #0f2a52; color: #fff; border: 0; border-radius: 6px; padding: 7px 14px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  .muted { color: #667085; }
+  .bad { color: #b42318; }
+  #status { margin: 8px 0 10px; white-space: pre-line; }
+</style>
+</head>
+<body>
+  <h1>U21 Rankings nightly import</h1>
+  <div class="muted">Runs every night at 11:30 PM while Chrome is open.</div>
+  <div id="status">Loading…</div>
+  <button id="run">Run now</button>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -42,7 +42,40 @@ async function refresh() {
   const keep = [$('#gHome').value, $('#gAway').value];
   $('#gHome').innerHTML = opts; $('#gAway').innerHTML = opts;
   $('#gHome').value = keep[0]; $('#gAway').value = keep[1];
-  renderGames(); renderTeams(); loadSettings();
+  renderGames(); renderTeams(); loadSettings(); loadAuto();
+}
+
+// ---------- nightly auto-import status ----------
+let autoPending = [], fromPending = false;
+async function loadAuto() {
+  try {
+    const { log, pending } = await api('/api/admin/auto');
+    autoPending = pending;
+    const last = log[0];
+    const when = d => new Date(d).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' });
+    let html = last
+      ? `Last run ${esc(when(last.at))}: ${last.added} new game(s)` +
+        (last.published ? ', published.' : last.publishError ? `, <span class="neg">publish failed: ${esc(last.publishError)}</span>` : '.') +
+        (last.blocked && last.blocked.length ? ` <span class="neg">Needed a human check: ${last.blocked.map(esc).join(', ')}.</span>` : '')
+      : 'No nightly runs yet. Install the Chrome extension from the <code>extension</code> folder (see README).';
+    if (pending.length) {
+      html += `<div class="notice" style="margin:8px 0 0">${pending.length} game(s) held back because a team name is new.
+        <button type="button" id="reviewPending" class="primary" style="margin-left:8px">Review</button>
+        <button type="button" id="clearPending" class="danger">Discard</button></div>`;
+    }
+    $('#autoStatus').innerHTML = html;
+    $('#reviewPending')?.addEventListener('click', () => {
+      const q = s => (/[",\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s));
+      $('#pasteText').value = ['date,home,home_score,away,away_score,shootout,type,division']
+        .concat(autoPending.map(r => [r.date, r.home, r.homeScore, r.away, r.awayScore, r.shootout ? 'yes' : '', r.type || 'league', r.division || ''].map(q).join(',')))
+        .join('\n');
+      fromPending = true;
+      $('#previewBtn').click();
+    });
+    $('#clearPending')?.addEventListener('click', e => confirmClick(e.target, async () => {
+      await api('/api/admin/auto/pending', { method: 'DELETE' }); loadAuto();
+    }));
+  } catch (e) { $('#autoStatus').textContent = e.message; }
 }
 
 // ---------- import ----------
@@ -117,6 +150,7 @@ async function commitImport() {
     const r = await api('/api/admin/import/commit', { method: 'POST', body: { rows, resolutions, defaults: { type: $('#impType').value, tier: $('#impTier').value, league: $('#impLeague').value } } });
     flash(`Imported ${r.added} game(s), created ${r.createdTeams} team(s), skipped ${r.skipped}. Press "Publish to public site" when you're done importing.`);
     $('#preview').innerHTML = ''; $('#pasteText').value = ''; parsed = null;
+    if (fromPending) { fromPending = false; await api('/api/admin/auto/pending', { method: 'DELETE' }).catch(() => {}); }
     await refresh();
   } catch (e) { fail(e); }
 }

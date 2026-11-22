@@ -3,7 +3,7 @@ const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
 const store = require('./lib/store');
-const { computeRatings } = require('./lib/ratings');
+const { seasonRatings, pickSeason } = require('./lib/season');
 const { parseText } = require('./lib/parse');
 const { rankingsPayload, teamPayload } = require('./lib/views');
 const { publish } = require('./lib/publish');
@@ -32,13 +32,14 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 // ---------- helpers ----------
-let cache = { v: -1, result: null };
-function ratings() {
+// Ratings per season, recomputed whenever the data changes.
+let cache = { v: -1, bySeason: new Map() };
+function ratings(season) {
   const db = store.load();
-  if (cache.v !== store.getVersion() || !cache.result) {
-    cache = { v: store.getVersion(), result: computeRatings(db.teams, db.games, db.settings) };
-  }
-  return cache.result;
+  if (cache.v !== store.getVersion()) cache = { v: store.getVersion(), bySeason: new Map() };
+  const key = season || db.settings.season;
+  if (!cache.bySeason.has(key)) cache.bySeason.set(key, seasonRatings(db, key));
+  return cache.bySeason.get(key);
 }
 
 function cookies(req) {
@@ -102,7 +103,11 @@ function parseGameInput(body, db) {
 }
 
 // ---------- public API ----------
-app.get('/api/rankings', (req, res) => res.json(rankingsPayload(store.load(), ratings())));
+app.get('/api/rankings', (req, res) => {
+  const db = store.load();
+  const season = pickSeason(db, req.query.season);
+  res.json(rankingsPayload(db, ratings(season), season));
+});
 
 app.get('/api/teams', (req, res) => {
   const db = store.load();
@@ -112,7 +117,9 @@ app.get('/api/teams', (req, res) => {
 function pick(o, keys) { const out = {}; if (o) for (const k of keys) out[k] = o[k]; return out; }
 
 app.get('/api/teams/:id', (req, res) => {
-  const payload = teamPayload(store.load(), ratings(), req.params.id);
+  const db = store.load();
+  const season = pickSeason(db, req.query.season);
+  const payload = teamPayload(db, ratings(season), req.params.id, season);
   if (!payload) return res.status(404).json({ error: 'Team not found' });
   res.json(payload);
 });
@@ -326,7 +333,7 @@ app.get('/api/admin/export', requireAdmin, (req, res) => {
 // Build the public static site and push it to GitHub Pages (gh-pages branch).
 app.post('/api/admin/publish', requireAdmin, async (req, res) => {
   try {
-    res.json(await publish(store.load(), ratings()));
+    res.json(await publish(store.load()));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -343,6 +350,80 @@ app.post('/api/admin/restore', requireAdmin, (req, res) => {
   if (badGame) return bad(res, 'Backup has a game with a missing team, score or date.');
   const saved = store.replace({ teams: b.teams, games: b.games, settings: b.settings || {} });
   res.json({ ok: true, teams: b.teams.length, games: b.games.length, previousSavedAs: saved });
+});
+
+// ---------- nightly auto-import (from the Chrome extension in /extension) ----------
+// Only accepted from this computer, and only from the extension: a web page can't send the
+// custom header without a CORS preflight, which this server never approves. Off in production.
+function autoAllowed(req) {
+  if (PRODUCTION) return false;
+  const ip = req.socket.remoteAddress || '';
+  if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) return false;
+  if (req.get('X-U21-Auto') !== '1') return false;
+  const origin = req.get('Origin');
+  return !origin || origin.startsWith('chrome-extension://');
+}
+let autoRunning = false;
+app.post('/api/auto/import', async (req, res) => {
+  if (!autoAllowed(req)) return res.status(403).json({ error: 'Not allowed' });
+  if (autoRunning) return res.status(409).json({ error: 'Already running' });
+  autoRunning = true;
+  try {
+    const db = store.load();
+    const leagues = Array.isArray(req.body.leagues) ? req.body.leagues.slice(0, 20) : [];
+    const blocked = (Array.isArray(req.body.blocked) ? req.body.blocked : []).map(s => String(s).slice(0, 100)).slice(0, 20);
+    const idx = teamIndex(db);
+    const existing = new Set(db.games.map(g => gameKey(g.date, g.homeId, g.awayId, g.homeScore, g.awayScore)));
+    db.pending = Array.isArray(db.pending) ? db.pending : [];
+    const pendingKeys = new Set(db.pending.map(p => [p.date, p.home, p.away, p.homeScore, p.awayScore].join('|')));
+    const summary = { at: new Date().toISOString(), added: 0, pending: 0, leagues: [], blocked };
+    for (const lg of leagues) {
+      const source = String(lg.source || '').slice(0, 100);
+      if (typeof lg.csv !== 'string' || lg.csv.length > 2e6) continue;
+      const rows = parseText(lg.csv, { season: db.settings.season });
+      let added = 0, held = 0;
+      for (const r of rows) {
+        if (r.error) continue;
+        const h = idx.get(store.normName(r.home)), a = idx.get(store.normName(r.away));
+        // Unknown names are never guessed: they wait in Admin for a person to match or create.
+        if (!h || !a) {
+          const k = [r.date, r.home, r.away, r.homeScore, r.awayScore].join('|');
+          if (!pendingKeys.has(k)) { pendingKeys.add(k); db.pending.push({ ...r, source }); held++; }
+          continue;
+        }
+        const g = parseGameInput({ ...r, homeId: h.id, awayId: a.id }, db);
+        if (typeof g === 'string') continue;
+        const key = gameKey(g.date, g.homeId, g.awayId, g.homeScore, g.awayScore);
+        if (existing.has(key)) continue;
+        existing.add(key);
+        db.games.push({ id: store.id('g'), ...g, source: 'auto', createdAt: new Date().toISOString() });
+        added++;
+      }
+      summary.added += added; summary.pending += held;
+      summary.leagues.push({ source, rows: rows.length, added, held });
+    }
+    db.autoLog = [summary, ...(Array.isArray(db.autoLog) ? db.autoLog : [])].slice(0, 30);
+    store.save();
+    if (summary.added > 0 && req.body.publish !== false) {
+      try { summary.published = (await publish(store.load())).url; }
+      catch (e) { summary.publishError = e.message; }
+      store.save(); // keep the publish result in the log
+    }
+    res.json(summary);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  } finally {
+    autoRunning = false;
+  }
+});
+// Admin view of the nightly runs and of games held back because a team name was unknown.
+app.get('/api/admin/auto', requireAdmin, (req, res) => {
+  const db = store.load();
+  res.json({ log: db.autoLog || [], pending: db.pending || [] });
+});
+app.delete('/api/admin/auto/pending', requireAdmin, (req, res) => {
+  const db = store.load();
+  db.pending = []; store.save(); res.json({ ok: true });
 });
 
 app.listen(PORT, () => console.log(`OMHA U21 Rankings running at http://localhost:${PORT}`));
