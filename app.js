@@ -4,13 +4,22 @@ const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 
 // On the published (static) site, window.STATIC_SITE is set by config.js and the API is
 // replaced by pre-built JSON files: api/rankings -> data/rankings.json, api/teams/X -> data/teams/X.json.
+// With ?season=YYYY-YY: data/seasons/YYYY-YY/rankings.json and data/seasons/YYYY-YY/teams/X.json.
 function staticUrl(url) {
-  const path = url.replace(/^\//, '');
-  if (path === 'api/rankings') return 'data/rankings.json';
+  const [path, query = ''] = url.replace(/^\//, '').split('?');
+  const season = new URLSearchParams(query).get('season');
+  const base = season && /^\d{4}-\d{2}$/.test(season) ? `data/seasons/${season}/` : 'data/';
+  if (path === 'api/rankings') return base + 'rankings.json';
   const m = path.match(/^api\/teams\/([^/?#]+)$/);
-  if (m) return `data/teams/${m[1]}.json`;
+  if (m) return `${base}teams/${m[1]}.json`;
   return null;
 }
+// The season in the page address (?season=2024-25), or '' for the current season.
+function urlSeason() {
+  const s = new URLSearchParams(location.search).get('season') || '';
+  return /^\d{4}-\d{2}$/.test(s) ? s : '';
+}
+const seasonQuery = (season, current, sep = '&') => (season && season !== current ? `${sep}season=${encodeURIComponent(season)}` : '');
 
 async function api(url, opts = {}) {
   if (window.STATIC_SITE) {

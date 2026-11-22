@@ -12,6 +12,7 @@
   <p class="sub" id="subtitle">Loading…</p>
 
   <div class="toolbar">
+    <select id="season" aria-label="Season"></select>
     <input id="q" class="grow" type="search" placeholder="Search team or association">
     <select id="tier"><option value="">All tiers</option></select>
     <select id="league"><option value="">All leagues</option></select>
@@ -46,15 +47,18 @@
 let data = null, sortKey = 'rank', sortDir = 1;
 
 async function load() {
-  data = await api('api/rankings');
+  const want = urlSeason();
+  data = await api('api/rankings' + (want ? '?season=' + encodeURIComponent(want) : ''));
+  $('#season').innerHTML = data.seasons.map(s => `<option value="${esc(s)}"${s === data.season ? ' selected' : ''}>${esc(s)}${s === data.currentSeason ? ' (current)' : ''}</option>`).join('');
   const s = data.settings;
   $$('.cap').forEach(e => e.textContent = s.goalCap);
   const ranked = data.teams.filter(t => t.rank).length;
   $('#subtitle').textContent = data.teams.length
-    ? `${data.season} season · ${ranked} ranked teams · ${data.gameCount} games · teams need ${s.minGames}+ games to be ranked` +
+    ? `${data.season} season${data.season === data.currentSeason ? '' : ' (final)'} · ${ranked} ranked teams · ${data.gameCount} games · teams need ${s.minGames}+ games to be ranked` +
       (data.updatedAt ? ` · updated ${new Date(data.updatedAt).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })}` : '')
     : `${data.season} season`;
   const opts = (k) => [...new Set(data.teams.map(t => t[k]).filter(Boolean))].sort();
+  $$('#tier option:not(:first-child), #league option:not(:first-child)').forEach(o => o.remove());
   $('#tier').insertAdjacentHTML('beforeend', opts('tier').map(v => `<option>${esc(v)}</option>`).join(''));
   $('#league').insertAdjacentHTML('beforeend', opts('league').map(v => `<option>${esc(v)}</option>`).join(''));
   restoreFilters();
@@ -96,7 +100,7 @@ function render() {
   const rowHtml = t => `
     <tr>
       <td class="rank">${t.groupRank ?? '<span class="muted">NR</span>'}</td>
-      <td class="team"><a href="team.html?id=${encodeURIComponent(t.id)}">${esc(t.name)}</a>
+      <td class="team"><a href="team.html?id=${encodeURIComponent(t.id)}${seasonQuery(data.season, data.currentSeason)}">${esc(t.name)}</a>
         ${t.association ? `<span class="assoc">${esc(t.association)}</span>` : ''}</td>
       <td>${t.tier ? `<span class="pill">${esc(t.tier)}</span>` : ''}</td>
       <td class="hide-sm">${esc(t.league)}</td>
@@ -121,6 +125,11 @@ $$('th.sortable').forEach(th => th.addEventListener('click', () => {
   else { sortKey = k; sortDir = ['rating', 'agd', 'sched', 'gp'].includes(k) ? -1 : 1; }
   render();
 }));
+$('#season').addEventListener('change', () => {
+  const s = $('#season').value;
+  history.replaceState(null, '', s === data.currentSeason ? location.pathname : '?season=' + encodeURIComponent(s));
+  load().catch(e => { $('#subtitle').textContent = e.message; });
+});
 ['q', 'tier', 'league', 'showAll'].forEach(id => $('#' + id).addEventListener('input', () => { saveFilters(); render(); }));
 load().catch(e => { $('#subtitle').textContent = e.message; });
 </script>
