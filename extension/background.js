@@ -21,18 +21,37 @@ function nextRunTime() {
   if (d <= new Date()) d.setDate(d.getDate() + 1);
   return d.getTime();
 }
+function lastScheduledTime() { return nextRunTime() - 24 * 3600 * 1000; }
+// One-shot alarm, re-armed for the next 11:30 PM after every run, so a late run (PC asleep)
+// never shifts the schedule.
 async function schedule() {
   await chrome.alarms.clear('nightly');
-  chrome.alarms.create('nightly', { when: nextRunTime(), periodInMinutes: 24 * 60 });
+  chrome.alarms.create('nightly', { when: nextRunTime() });
+  // Every 5 minutes: ask the local server whether the Windows nightly task wants a run.
+  if (!(await chrome.alarms.get('poll'))) chrome.alarms.create('poll', { periodInMinutes: 5, delayInMinutes: 1 });
 }
-// If Chrome was closed at run time, catch up a few minutes after it starts.
+// If the last 11:30 PM run was missed (Chrome closed or PC asleep), catch up shortly.
 async function catchUp() {
-  const { lastOk = 0 } = await chrome.storage.local.get('lastOk');
-  if (Date.now() - lastOk > 26 * 3600 * 1000) chrome.alarms.create('catchup', { delayInMinutes: 3 });
+  const { last } = await chrome.storage.local.get('last');
+  if (!last || last.at < lastScheduledTime()) chrome.alarms.create('catchup', { delayInMinutes: 1 });
 }
-chrome.runtime.onInstalled.addListener(() => { schedule(); });
+async function poll() {
+  const { last } = await chrome.storage.local.get('last');
+  if (last && Date.now() - last.at < 20 * 60 * 1000) return; // just ran
+  try {
+    const r = await fetch(SERVER + '/api/auto/wanted', { headers: { 'X-U21-Auto': '1' } });
+    if (r.ok && (await r.json()).run) run('task');
+  } catch {} // server not running; the nightly task starts it
+}
+chrome.runtime.onInstalled.addListener(() => { schedule(); catchUp(); });
 chrome.runtime.onStartup.addListener(() => { schedule(); catchUp(); });
-chrome.alarms.onAlarm.addListener(a => { if (['nightly', 'catchup', 'retry'].includes(a.name)) run(a.name); });
+chrome.alarms.onAlarm.addListener(a => {
+  if (a.name === 'poll') { poll(); return; }
+  if (a.name === 'nightly') schedule();
+  if (['nightly', 'catchup', 'retry'].includes(a.name)) run(a.name);
+});
+// Service workers can be restarted at any time; make sure the alarms always exist.
+chrome.alarms.get('nightly').then(a => { if (!a) schedule(); });
 chrome.runtime.onMessage.addListener((msg, _s, reply) => {
   if (msg && msg.type === 'run-now') { run('manual').then(reply); return true; }
 });

@@ -364,10 +364,33 @@ function autoAllowed(req) {
   return !origin || origin.startsWith('chrome-extension://');
 }
 let autoRunning = false;
+// The Windows nightly task (scripts/nightly.ps1) wakes the PC and asks for a run here; the
+// extension polls /api/auto/wanted every few minutes and runs when asked.
+let autoWanted = 0;
+function localOnly(req) {
+  if (PRODUCTION) return false;
+  const ip = req.socket.remoteAddress || '';
+  return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip) && req.get('X-U21-Auto') === '1';
+}
+app.post('/api/auto/request', (req, res) => {
+  if (!localOnly(req)) return res.status(403).json({ error: 'Not allowed' });
+  autoWanted = Date.now();
+  res.json({ ok: true });
+});
+app.get('/api/auto/wanted', (req, res) => {
+  if (!autoAllowed(req)) return res.status(403).json({ error: 'Not allowed' });
+  res.json({ run: autoWanted > 0 && Date.now() - autoWanted < 6 * 3600 * 1000 });
+});
+app.get('/api/auto/last', (req, res) => {
+  if (!localOnly(req)) return res.status(403).json({ error: 'Not allowed' });
+  const db = store.load();
+  res.json({ last: (db.autoLog || [])[0] || null, wanted: autoWanted > 0 });
+});
 app.post('/api/auto/import', async (req, res) => {
   if (!autoAllowed(req)) return res.status(403).json({ error: 'Not allowed' });
   if (autoRunning) return res.status(409).json({ error: 'Already running' });
   autoRunning = true;
+  autoWanted = 0;
   try {
     const db = store.load();
     const leagues = Array.isArray(req.body.leagues) ? req.body.leagues.slice(0, 20) : [];

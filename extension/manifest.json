@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "U21 Rankings Nightly Import",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Every night, reads U21 rep results from the league Schedule pages and sends them to the local rankings site.",
   "permissions": ["alarms", "tabs", "scripting", "storage", "notifications"],
   "host_permissions": [
