@@ -27,8 +27,9 @@ function lastScheduledTime() { return nextRunTime() - 24 * 3600 * 1000; }
 async function schedule() {
   await chrome.alarms.clear('nightly');
   chrome.alarms.create('nightly', { when: nextRunTime() });
-  // Every 5 minutes: ask the local server whether the Windows nightly task wants a run.
-  if (!(await chrome.alarms.get('poll'))) chrome.alarms.create('poll', { periodInMinutes: 5, delayInMinutes: 1 });
+  // Every minute: ask the local server whether the Windows nightly task wants a run.
+  const pa = await chrome.alarms.get('poll');
+  if (!pa || pa.periodInMinutes !== 1) chrome.alarms.create('poll', { periodInMinutes: 1, delayInMinutes: 1 });
 }
 // If the last 11:30 PM run was missed (Chrome closed or PC asleep), catch up shortly.
 async function catchUp() {

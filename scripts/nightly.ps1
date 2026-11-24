@@ -12,9 +12,10 @@ $server = 'http://localhost:4700'
 $hdr = @{ 'X-U21-Auto' = '1' }
 function Log($m) { "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $m" | Out-File -FilePath $log -Append -Encoding utf8 }
 
-# Keep the system awake while this script runs (released automatically when it exits).
+# Keep the system awake AND the screen on while this script runs (released when it exits).
+# Screen on matters: in Modern Standby (screen off) Windows suspends the browser.
 Add-Type -Namespace U21 -Name Power -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint f);'
-[void][U21.Power]::SetThreadExecutionState([uint32]'0x80000001') # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+[void][U21.Power]::SetThreadExecutionState([uint32]'0x80000003') # ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
 
 function ServerUp { try { Invoke-RestMethod "$server/api/auto/last" -Headers $hdr -TimeoutSec 5 | Out-Null; $true } catch { $false } }
 
@@ -49,12 +50,7 @@ while ((Get-Date) -lt $end) {
   Start-Sleep 20
   try {
     $last = (Invoke-RestMethod "$server/api/auto/last" -Headers $hdr).last
-    if ($last -and $last.at -ne $before) {
-      $blocked = if ($last.blocked) { " Blocked: $($last.blocked -join ', ')." } else { '' }
-      $pub = if ($last.published) { ' Site published.' } elseif ($last.publishError) { " PUBLISH FAILED: $($last.publishError)" } else { '' }
-      Log "Done: $($last.added) new game(s), $($last.pending) held.$blocked$pub"
-      exit 0
-    }
+    if ($last -and $last.at -ne $before) { exit 0 } # the server logs the result
   } catch {}
 }
 Log "ERROR: the browser extension did not report back within $WaitMinutes minutes (is it loaded and enabled?)."

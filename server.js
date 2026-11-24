@@ -363,6 +363,18 @@ function autoAllowed(req) {
   const origin = req.get('Origin');
   return !origin || origin.startsWith('chrome-extension://');
 }
+// One line per import in data/nightly-task.log (alongside what scripts/nightly.ps1 writes).
+function nightlyLog(s) {
+  const t = new Date(), p = n => String(n).padStart(2, '0');
+  const ts = `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())}`;
+  const parts = [`Import done: ${s.added} new game(s), ${s.pending} held.`];
+  if (s.leagues.length) parts.push('Read: ' + s.leagues.map(l => `${l.source} +${l.added}`).join(', ') + '.');
+  if (s.blocked.length) parts.push(`Human check needed: ${s.blocked.join(', ')}.`);
+  if (s.published) parts.push('Site published.');
+  if (s.publishError) parts.push(`PUBLISH FAILED: ${s.publishError}`);
+  try { require('fs').appendFileSync(require('path').join(__dirname, 'data', 'nightly-task.log'), `${ts}  ${parts.join(' ')}
+`); } catch {}
+}
 let autoRunning = false;
 // The Windows nightly task (scripts/nightly.ps1) wakes the PC and asks for a run here; the
 // extension polls /api/auto/wanted every few minutes and runs when asked.
@@ -432,6 +444,7 @@ app.post('/api/auto/import', async (req, res) => {
       catch (e) { summary.publishError = e.message; }
       store.save(); // keep the publish result in the log
     }
+    nightlyLog(summary);
     res.json(summary);
   } catch (e) {
     res.status(500).json({ error: e.message });
