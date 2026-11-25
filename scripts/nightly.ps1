@@ -3,7 +3,7 @@
 #  2. starts the browser (Brave/Chrome, where the extension lives) if it isn't running
 #  3. keeps the PC awake and asks the extension to run, then waits for the result
 # Log: data\nightly-task.log
-param([int]$WaitMinutes = 25, [switch]$ServerOnly)
+param([int]$WaitMinutes = 25, [switch]$ServerOnly, [switch]$IfMissed)
 
 $ErrorActionPreference = 'Continue'
 $root = Split-Path -Parent $PSScriptRoot
@@ -28,6 +28,16 @@ if (-not (ServerUp)) {
 }
 if ($ServerOnly) { exit 0 }
 
+if ($IfMissed) {
+  # Woken/logged in: only run if no import has happened since the last 11:25 PM.
+  $due = (Get-Date).Date.AddHours(23).AddMinutes(25)
+  if ($due -gt (Get-Date)) { $due = $due.AddDays(-1) }
+  try {
+    $at = (Invoke-RestMethod "$server/api/auto/last" -Headers $hdr).last.at
+    if ($at -and ([datetime]$at) -gt $due) { exit 0 }
+  } catch {}
+  Log 'Catch-up run (last night was missed).'
+}
 Log 'Nightly run starting.'
 $browsers = @(
   'C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe',
